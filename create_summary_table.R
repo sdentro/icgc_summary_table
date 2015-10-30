@@ -24,7 +24,10 @@ SNV_CLUSTERS_SUFFIX = "_optimaInfo.txt"
 SNV_ASSIGNMENT_SUFFIX = "_1250iters_250burnin_bestConsensusAssignments.bed"
 # Fraction of total SNVs assigned to a cluster to make it believable
 FRAC_SNVS_CLUSTER = 0.01
+CLONAL_PEAK_MIN_CCF = 0.9
+CLONAL_PEAK_MAX_CCF = 1.1
 COVERAGE_FILES = c("../coverage/coverage_santa_cruz.txt", "../coverage/coverage_august_release_single.txt")
+GENDER_FILES = c("../gender/2015_05_15_santa_cruz_pilot_inferred_genders.txt", "../gender/2015_08_31_santa_cruz_pilot_inferred_genders_multiplesamples.txt")
 
 samplelist = read.table("2015_10_15_icgc_samples_pass.tsv", header=T, stringsAsFactors=F)
 
@@ -33,7 +36,7 @@ samplelist = read.table("2015_10_15_icgc_samples_pass.tsv", header=T, stringsAsF
 #############################################################################################################################
 cancer_type = unlist(lapply(samplelist$projectcode, function(x) { unlist(strsplit(x, "-"))[1] } ))
 samplelist = samplelist$sampleid
-
+print("Basic table")
 output = data.frame(cancer_type=cancer_type, samplename=samplelist)
 
 #############################################################################################################################
@@ -42,6 +45,7 @@ output = data.frame(cancer_type=cancer_type, samplename=samplelist)
 getPurity = function(samplename) {
   return(read.table(paste(PATH_TO_BB, samplename, RHO_PSI_SUFFIX, sep=""), header=T, stringsAsFactors=F)["FRAC_GENOME", "rho"])
 }
+print("Purity")
 purity = unlist(lapply(samplelist, getPurity))
 output$purity = purity
 
@@ -57,17 +61,25 @@ getPloidy = function(samplename) {
   return(ploidy)
 }
 
+print("Ploidy")
 ploidy = unlist(lapply(samplelist, getPloidy))
-output$ploidy = ploidy
+output$ploidy = round(ploidy, 3)
 
 #############################################################################################################################
 # num and frac clonal and num_subclones
 #############################################################################################################################
-getSubclonesAndAssignments = function(samplename, min_clonal_ccf=0.9) {
+getSubclonesAndAssignments = function(samplename, min_clonal_ccf=CLONAL_PEAK_MIN_CCF, max_clonal_ccf=CLONAL_PEAK_MAX_CCF) {
   sample_dp_dir = paste(PATH_TO_DP, samplename, DP_OUTDIR_SUFFIX, "/", sep="")
   # Make sure the files exist, this does seem to happen every once in a while
   if (!file.exists(paste(sample_dp_dir, samplename, SNV_CLUSTERS_SUFFIX, sep="")) | !file.exists(paste(sample_dp_dir, samplename, SNV_ASSIGNMENT_SUFFIX, sep=""))) {
-    return(list(NA, NA, NA))
+    if (!file.exists(paste(sample_dp_dir, samplename, SNV_CLUSTERS_SUFFIX, sep=""))) {
+      warning(paste(samplename, "no clusters"))
+    }
+    
+    if (!file.exists(paste(sample_dp_dir, samplename, SNV_ASSIGNMENT_SUFFIX, sep=""))) {
+      warning(paste(samplename, "no assignments"))
+    }
+    return(list(NA, NA, NA, NA))
   }
   
   clusters = read.table(paste(sample_dp_dir, samplename, SNV_CLUSTERS_SUFFIX, sep=""), header=T, stringsAsFactors=F)
@@ -79,21 +91,25 @@ getSubclonesAndAssignments = function(samplename, min_clonal_ccf=0.9) {
   num_clonal = 0
   num_subclonal = 0
   num_subclones = 0
+  num_superclones = 0
   for (cluster in kept_clusters) {
-    if (clusters[clusters$cluster.no==cluster,]$location > min_clonal_ccf) {
+    if (clusters[clusters$cluster.no==cluster,]$location > min_clonal_ccf & clusters[clusters$cluster.no==cluster,]$location > max_clonal_ccf) {
       # Clonal
       num_clonal = num_clonal + assignments[cluster]
+    } else if (clusters[clusters$cluster.no==cluster,]$location > max_clonal_ccf) {
+      # Superclonal
+      num_superclones = num_superclones + 1
     } else {
       # Subclonal
       num_subclonal = num_subclonal + assignments[cluster]
       num_subclones = num_subclones + 1
     }
   }
-  return(list(num_subclones, num_clonal, num_subclonal))
+  return(list(num_subclones, num_clonal, num_subclonal, num_superclones))
 }
-
-res = as.data.frame(matrix(unlist(lapply(samplelist, getSubclonesAndAssignments)), ncol=3, byrow=T))
-colnames(res) = c("num_subclones", "num_clonal", "num_subclonal")
+print("Num subclones")
+res = as.data.frame(matrix(unlist(lapply(samplelist, getSubclonesAndAssignments)), ncol=4, byrow=T))
+colnames(res) = c("num_subclones", "num_clonal", "num_subclonal", "num_superclonal")
 res$frac_clonal = round(res$num_subclonal / (res$num_subclonal+res$num_clonal), 3)
 output = data.frame(output, res)
 
@@ -153,7 +169,7 @@ getCNAFractions = function(samplename, data_table, max_ploid_diploid=2.7) {
               subclonal=round(cn_sample["subclonal"][[1]]/genome_len, 3), 
               ploidy_category=ploid))
 }
-
+print("Copy number")
 res = as.data.frame(matrix(unlist(
   lapply(samplelist, function(x, ploidy) { getCNAFractions(x, output) })), 
   ncol=4, byrow=T))
@@ -169,16 +185,37 @@ for (infile in COVERAGE_FILES) {
   colnames(d) = c("tumour", "cov_tumour", "normal", "cov_normal")
   coverage = rbind(coverage, d)
 }
+print("Coverage")
 row_match = match(output$samplename, coverage$tumour)
 output$cov_tumour = coverage[row_match,]$cov_tumour
 output$cov_normal = coverage[row_match,]$cov_normal
 
 #############################################################################################################################
+# Sex
+#############################################################################################################################
+sex = NULL
+for (infile in GENDER_FILES) {
+  d = read.table(infile, header=T, stringsAsFactors=F)
+  sex = rbind(sex, d)
+}
+print("Sex")
+row_match = match(output$samplename, sex$tumour)
+output$sex = sex[row_match,]$pred_gender
+
+#############################################################################################################################
 # power calculation
 #############################################################################################################################
-output$nrpcc = output$purity*output$cov_tumour/output$ploidy / (output$purity*output$cov_tumour/output$ploidy + (1-output$purity)*output$cov_tumour*2) * output$cov_tumour
+print("Power")
+output$nrpcc = round(output$purity*output$cov_tumour/output$ploidy / (output$purity*output$cov_tumour/output$ploidy + (1-output$purity)*output$cov_tumour*2) * output$cov_tumour, 3)
+
+reads = (output$purity*output$ploidy + (1-output$purity)*2)
+nrpcc = (output$purity) / (output$purity*output$ploidy + (1-output$purity)*2) * reads
+output$nrpcc2 = nrpcc
 
 #############################################################################################################################
 # save output
 #############################################################################################################################
 write.table(output, file="summary_table.txt", sep="\t", row.names=F, quote=F)
+
+warnings()
+q(save="no")

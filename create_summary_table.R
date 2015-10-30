@@ -26,6 +26,7 @@ SNV_ASSIGNMENT_SUFFIX = "_1250iters_250burnin_bestConsensusAssignments.bed"
 FRAC_SNVS_CLUSTER = 0.01
 CLONAL_PEAK_MIN_CCF = 0.9
 CLONAL_PEAK_MAX_CCF = 1.1
+PLOIDY_MAX_DIPLOID = 2.7
 COVERAGE_FILES = c("../coverage/coverage_santa_cruz.txt", "../coverage/coverage_august_release_single.txt")
 GENDER_FILES = c("../gender/2015_05_15_santa_cruz_pilot_inferred_genders.txt", "../gender/2015_08_31_santa_cruz_pilot_inferred_genders_multiplesamples.txt")
 
@@ -134,10 +135,9 @@ getCNstatus = function(segment, normalCN=1) {
   return(status)
 }
 
-getCNAFractions = function(samplename, data_table, max_ploid_diploid=2.7) {
+getCNAFractions = function(samplename, data_table, max_ploid_diploid=PLOIDY_MAX_DIPLOID) {
   ploidy = data_table[data_table$samplename==samplename,]$ploidy
   subclones = read.table(paste(PATH_TO_BB, samplename, SUBCLONES_SUFFIX, sep=""), header=T, stringsAsFactors=F)
-  #dat = dat[,1:13]
   subclones$len = round((subclones$endpos-subclones$startpos)/1000)
   genome_len = sum(as.numeric(subclones$len))
 

@@ -27,10 +27,11 @@ FRAC_SNVS_CLUSTER = 0.01
 CLONAL_PEAK_MIN_CCF = 0.9
 CLONAL_PEAK_MAX_CCF = 1.1
 PLOIDY_MAX_DIPLOID = 2.7
-COVERAGE_FILES = c("../coverage/coverage_santa_cruz.txt", "../coverage/coverage_august_release_single.txt")
-GENDER_FILES = c("../gender/2015_05_15_santa_cruz_pilot_inferred_genders.txt", "../gender/2015_08_31_santa_cruz_pilot_inferred_genders_multiplesamples.txt")
+COVERAGE_FILES = c("../coverage/coverage_santa_cruz.txt", "../coverage/coverage_august_release_single.txt", "../coverage/coverage_august_release_multiple.txt")
+GENDER_FILES = c("../gender/2015_05_15_santa_cruz_pilot_inferred_genders.txt", "../gender/2015_08_31_santa_cruz_pilot_inferred_genders_multiplesamples.txt", "../gender/2015_10_06_august_release_genders_single.txt", "../gender/2015_10_27_august_release_genders_multiple.txt")
 
-samplelist = read.table("2015_10_15_icgc_samples_pass.tsv", header=T, stringsAsFactors=F)
+#samplelist = read.table("2015_10_15_icgc_samples_pass.tsv", header=T, stringsAsFactors=F)
+samplelist = read.table("2015_10_29_icgc_samples_pass.tsv", header=T, stringsAsFactors=F)
 
 #############################################################################################################################
 # Annotate the cancer type
@@ -80,7 +81,7 @@ getSubclonesAndAssignments = function(samplename, min_clonal_ccf=CLONAL_PEAK_MIN
     if (!file.exists(paste(sample_dp_dir, samplename, SNV_ASSIGNMENT_SUFFIX, sep=""))) {
       warning(paste(samplename, "no assignments"))
     }
-    return(list(NA, NA, NA, NA))
+    return(list(NA, NA, NA, NA, NA))
   }
   
   clusters = read.table(paste(sample_dp_dir, samplename, SNV_CLUSTERS_SUFFIX, sep=""), header=T, stringsAsFactors=F)
@@ -93,25 +94,29 @@ getSubclonesAndAssignments = function(samplename, min_clonal_ccf=CLONAL_PEAK_MIN
   num_subclonal = 0
   num_subclones = 0
   num_superclones = 0
+  num_superclonal = 0
   for (cluster in kept_clusters) {
-    if (clusters[clusters$cluster.no==cluster,]$location > min_clonal_ccf & clusters[clusters$cluster.no==cluster,]$location > max_clonal_ccf) {
-      # Clonal
-      num_clonal = num_clonal + assignments[cluster]
-    } else if (clusters[clusters$cluster.no==cluster,]$location > max_clonal_ccf) {
-      # Superclonal
-      num_superclones = num_superclones + 1
+    if (clusters[clusters$cluster.no==cluster,]$location > min_clonal_ccf) {
+	   # Clonal
+	   num_clonal = num_clonal + assignments[cluster]
+
+    	   if (clusters[clusters$cluster.no==cluster,]$location > max_clonal_ccf) {
+		   # Superclonal
+		   num_superclones = num_superclones + 1
+		   num_superclonal = num_superclonal + assignments[cluster]
+	   }
     } else {
       # Subclonal
       num_subclonal = num_subclonal + assignments[cluster]
       num_subclones = num_subclones + 1
     }
   }
-  return(list(num_subclones, num_clonal, num_subclonal, num_superclones))
+  return(list(num_subclones, num_clonal, num_subclonal, num_superclones, num_superclonal))
 }
 print("Num subclones")
-res = as.data.frame(matrix(unlist(lapply(samplelist, getSubclonesAndAssignments)), ncol=4, byrow=T))
-colnames(res) = c("num_subclones", "num_clonal", "num_subclonal", "num_superclonal")
-res$frac_clonal = round(res$num_subclonal / (res$num_subclonal+res$num_clonal), 3)
+res = as.data.frame(matrix(unlist(lapply(samplelist, getSubclonesAndAssignments)), ncol=5, byrow=T))
+colnames(res) = c("num_subclones", "num_clonal", "num_subclonal", "num_superclones", "num_superclonal")
+res$frac_clonal = round(res$num_clonal / (res$num_subclonal+res$num_clonal), 3)
 output = data.frame(output, res)
 
 #############################################################################################################################
@@ -206,11 +211,10 @@ output$sex = sex[row_match,]$pred_gender
 # power calculation
 #############################################################################################################################
 print("Power")
-output$nrpcc = round(output$purity*output$cov_tumour/output$ploidy / (output$purity*output$cov_tumour/output$ploidy + (1-output$purity)*output$cov_tumour*2) * output$cov_tumour, 3)
+output$nrpcc = round((output$purity) / (output$purity*output$ploidy + (1-output$purity)*2) * output$cov_tumour, 3)
 
-reads = (output$purity*output$ploidy + (1-output$purity)*2)
-nrpcc = (output$purity) / (output$purity*output$ploidy + (1-output$purity)*2) * reads
-output$nrpcc2 = nrpcc
+# Original implementation
+#output$nrpcc3 = output$cov_tumour/output$ploidy*output$purity
 
 #############################################################################################################################
 # save output

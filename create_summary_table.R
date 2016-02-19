@@ -37,16 +37,18 @@ is_refit = read.table("2015_10_29_sample_refitted_complete.tsv", header=T, strin
 #############################################################################################################################
 # Annotate the cancer type
 #############################################################################################################################
+projectcode = samplelist$projectcode
 cancer_type = unlist(lapply(samplelist$projectcode, function(x) { unlist(strsplit(x, "-"))[1] } ))
 samplelist = samplelist$sampleid
 print("Basic table")
-output = data.frame(cancer_type=cancer_type, samplename=samplelist)
+output = data.frame(projectcode=projectcode, cancer_type=cancer_type, samplename=samplelist)
 
 #############################################################################################################################
 # Purity
 #############################################################################################################################
 getPurity = function(samplename) {
-  return(read.table(paste(PATH_TO_BB, samplename, RHO_PSI_SUFFIX, sep=""), header=T, stringsAsFactors=F)["FRAC_GENOME", "rho"])
+  cancer_type = output[output$samplename==samplename, ]$projectcode
+  return(read.table(paste(PATH_TO_BB, cancer_type, "/", samplename, "/", samplename, RHO_PSI_SUFFIX, sep=""), header=T, stringsAsFactors=F)["FRAC_GENOME", "rho"])
 }
 print("Purity")
 purity = unlist(lapply(samplelist, getPurity))
@@ -56,7 +58,8 @@ output$purity = purity
 # Ploidy
 #############################################################################################################################
 getPloidy = function(samplename) {
-  subclones = read.table(paste(PATH_TO_BB, samplename, SUBCLONES_SUFFIX, sep=""), header=T, stringsAsFactors=F)
+  cancer_type = output[output$samplename==samplename, ]$projectcode
+  subclones = read.table(paste(PATH_TO_BB, cancer_type, "/", samplename, "/", samplename, SUBCLONES_SUFFIX, sep=""), header=T, stringsAsFactors=F)
   subclones$length = round((subclones$endpos-subclones$startpos)/1000)
   cn_state_one = (subclones$nMaj1_A+subclones$nMin1_A)*subclones$frac1_A
   cn_state_two = ifelse(!is.na(subclones$frac2_A), (subclones$nMaj2_A+subclones$nMin2_A)*subclones$frac2_A, 0)
@@ -143,7 +146,8 @@ getCNstatus = function(segment, normalCN=1) {
 
 getCNAFractions = function(samplename, data_table, max_ploid_diploid=PLOIDY_MAX_DIPLOID) {
   ploidy = data_table[data_table$samplename==samplename,]$ploidy
-  subclones = read.table(paste(PATH_TO_BB, samplename, SUBCLONES_SUFFIX, sep=""), header=T, stringsAsFactors=F)
+  cancer_type = data_table[data_table$samplename==samplename,]$projectcode
+  subclones = read.table(paste(PATH_TO_BB, cancer_type, "/", samplename, "/", samplename, SUBCLONES_SUFFIX, sep=""), header=T, stringsAsFactors=F)
   subclones$len = round((subclones$endpos-subclones$startpos)/1000)
   genome_len = sum(as.numeric(subclones$len))
 

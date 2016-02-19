@@ -32,6 +32,7 @@ GENDER_FILES = c("../gender/2015_05_15_santa_cruz_pilot_inferred_genders.txt", "
 
 #samplelist = read.table("2015_10_15_icgc_samples_pass.tsv", header=T, stringsAsFactors=F)
 samplelist = read.table("2015_10_29_icgc_samples_pass.tsv", header=T, stringsAsFactors=F)
+is_refit = read.table("2015_10_29_sample_refitted_complete.tsv", header=T, stringsAsFactors=F)
 
 #############################################################################################################################
 # Annotate the cancer type
@@ -215,6 +216,12 @@ output$nrpcc = round((output$purity) / (output$purity*output$ploidy + (1-output$
 
 # Original implementation
 #output$nrpcc3 = output$cov_tumour/output$ploidy*output$purity
+
+#############################################################################################################################
+# Add column whether a sample has been refit
+#############################################################################################################################
+row_match = match(output$samplename, is_refit$samplename)
+output$refit = is_refit[row_match,2]
 
 #############################################################################################################################
 # save output

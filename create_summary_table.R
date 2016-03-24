@@ -27,12 +27,13 @@ FRAC_SNVS_CLUSTER = 0.01
 CLONAL_PEAK_MIN_CCF = 0.9
 CLONAL_PEAK_MAX_CCF = 1.1
 PLOIDY_MAX_DIPLOID = 2.7
-COVERAGE_FILES = c("../coverage/coverage_santa_cruz.txt", "../coverage/coverage_august_release_single.txt", "../coverage/coverage_august_release_multiple.txt")
-GENDER_FILES = c("../gender/2015_05_15_santa_cruz_pilot_inferred_genders.txt", "../gender/2015_08_31_santa_cruz_pilot_inferred_genders_multiplesamples.txt", "../gender/2015_10_06_august_release_genders_single.txt", "../gender/2015_10_27_august_release_genders_multiple.txt")
+COVERAGE_FILES = c("../coverage/coverage_santa_cruz.txt", "../coverage/coverage_august_release_single.txt", "../coverage/coverage_august_release_multiple.txt", "../coverage/missing_coverage.tsv")
+GENDER_FILES = c("../gender/2015_05_15_santa_cruz_pilot_inferred_genders.txt", "../gender/2015_08_31_santa_cruz_pilot_inferred_genders_multiplesamples.txt", "../gender/2015_10_06_august_release_genders_single.txt", "../gender/2015_10_27_august_release_genders_multiple.txt", "../gender/2016_02_01_gender_unreleased_samples.txt", "../gender/2016_03_06_october_release_genders.txt")
 
 #samplelist = read.table("2015_10_15_icgc_samples_pass.tsv", header=T, stringsAsFactors=F)
-samplelist = read.table("2015_10_29_icgc_samples_pass.tsv", header=T, stringsAsFactors=F)
-is_refit = read.table("2015_10_29_sample_refitted_complete.tsv", header=T, stringsAsFactors=F)
+#samplelist = read.table("2015_10_29_icgc_samples_pass.tsv", header=T, stringsAsFactors=F)
+samplelist = read.table("samplenames_included.tsv", header=T, stringsAsFactors=F)
+#is_refit = read.table("2015_10_29_sample_refitted_complete.tsv", header=T, stringsAsFactors=F)
 
 #############################################################################################################################
 # Annotate the cancer type
@@ -48,7 +49,12 @@ output = data.frame(projectcode=projectcode, cancer_type=cancer_type, samplename
 #############################################################################################################################
 getPurity = function(samplename) {
   cancer_type = output[output$samplename==samplename, ]$projectcode
-  return(read.table(paste(PATH_TO_BB, cancer_type, "/", samplename, "/", samplename, RHO_PSI_SUFFIX, sep=""), header=T, stringsAsFactors=F)["FRAC_GENOME", "rho"])
+  filename = paste(PATH_TO_BB, cancer_type, "/", samplename, "/", samplename, RHO_PSI_SUFFIX, sep="")
+  if (file.exists(filename)) {
+  	  return(read.table(filename, header=T, stringsAsFactors=F)["FRAC_GENOME", "rho"])
+  } else {
+	  return(NA)
+  }
 }
 print("Purity")
 purity = unlist(lapply(samplelist, getPurity))
@@ -224,8 +230,9 @@ output$nrpcc = round((output$purity) / (output$purity*output$ploidy + (1-output$
 #############################################################################################################################
 # Add column whether a sample has been refit
 #############################################################################################################################
-row_match = match(output$samplename, is_refit$samplename)
-output$refit = is_refit[row_match,2]
+#row_match = match(output$samplename, is_refit$samplename)
+#output$refit = is_refit[row_match,2]
+output$refit = NA
 
 #############################################################################################################################
 # save output

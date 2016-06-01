@@ -19,7 +19,7 @@ PATH_TO_BB = "../battenberg/"
 PATH_TO_DP = "../dirichlet/"
 SUBCLONES_SUFFIX = "_subclones.txt"
 RHO_PSI_SUFFIX = "_rho_and_psi.txt"
-DP_OUTDIR_SUFFIX = "_DPoutput_1250iters_250burnin"
+DP_OUTDIR_SUFFIX = "_DPoutput_1250iters_250burnin_seed123" # Change this between DPClust versions
 SNV_CLUSTERS_SUFFIX = "_optimaInfo.txt"
 SNV_ASSIGNMENT_SUFFIX = "_1250iters_250burnin_bestConsensusAssignments.bed"
 # Fraction of total SNVs assigned to a cluster to make it believable

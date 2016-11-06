@@ -20,27 +20,32 @@ PATH_TO_DP = "../dirichlet/"
 SUBCLONES_SUFFIX = "_subclones.txt"
 RHO_PSI_SUFFIX = "_rho_and_psi.txt"
 DP_OUTDIR_SUFFIX = "_DPoutput_1250iters_250burnin_seed123" # Change this between DPClust versions
+#SNV_CLUSTERS_SUFFIX = "_1250iters_250burnin_bestClusterInfo.txt" #"_optimaInfo.txt" # Change this between DPClust versions
 SNV_CLUSTERS_SUFFIX = "_optimaInfo.txt"
 SNV_ASSIGNMENT_SUFFIX = "_1250iters_250burnin_bestConsensusAssignments.bed"
 # Fraction of total SNVs assigned to a cluster to make it believable
 FRAC_SNVS_CLUSTER = 0.01
+# Minimum number of SNVs that make a cluster believable. This is jointly applied with the above filter, if either passed the cluster is kept
+#MIN_NUM_SNVS_CLUSTER = 50 # Disabled for now as it may need to be increased, further investigation needed
 CLONAL_PEAK_MIN_CCF = 0.9
 CLONAL_PEAK_MAX_CCF = 1.1
 PLOIDY_MAX_DIPLOID = 2.7
 COVERAGE_FILES = c("../coverage/coverage_santa_cruz.txt", "../coverage/coverage_august_release_single.txt", "../coverage/coverage_august_release_multiple.txt", "../coverage/missing_coverage.tsv")
-GENDER_FILES = c("../gender/2015_05_15_santa_cruz_pilot_inferred_genders.txt", "../gender/2015_08_31_santa_cruz_pilot_inferred_genders_multiplesamples.txt", "../gender/2015_10_06_august_release_genders_single.txt", "../gender/2015_10_27_august_release_genders_multiple.txt", "../gender/2016_02_01_gender_unreleased_samples.txt", "../gender/2016_03_06_october_release_genders.txt")
+#GENDER_FILES = c("../gender/2015_05_15_santa_cruz_pilot_inferred_genders.txt", "../gender/2015_08_31_santa_cruz_pilot_inferred_genders_multiplesamples.txt", "../gender/2015_10_06_august_release_genders_single.txt", "../gender/2015_10_27_august_release_genders_multiple.txt", "../gender/2016_02_01_gender_unreleased_samples.txt", "../gender/2016_03_06_october_release_genders.txt")
+GENDER_FILES = c("../gender/genders.txt")
+ICGC_HISTOLOGY_FILE = "/nfs/users/nfs_c/cgppipe/pancancer/workspace/sd11/icgc_pancan_full/clinical_data/pcawg_specimen_histology_August2016_v6_fixed.tsv"
 
 #samplelist = read.table("2015_10_15_icgc_samples_pass.tsv", header=T, stringsAsFactors=F)
 #samplelist = read.table("2015_10_29_icgc_samples_pass.tsv", header=T, stringsAsFactors=F)
-samplelist = read.table("samplenames_included.tsv", header=T, stringsAsFactors=F)
+sampleinput = read.table("samplenames_included.tsv", header=T, stringsAsFactors=F)
 #is_refit = read.table("2015_10_29_sample_refitted_complete.tsv", header=T, stringsAsFactors=F)
 
 #############################################################################################################################
 # Annotate the cancer type
 #############################################################################################################################
-projectcode = samplelist$projectcode
-cancer_type = unlist(lapply(samplelist$projectcode, function(x) { unlist(strsplit(x, "-"))[1] } ))
-samplelist = samplelist$sampleid
+projectcode = sampleinput$projectcode
+cancer_type = unlist(lapply(sampleinput$projectcode, function(x) { unlist(strsplit(x, "-"))[1] } ))
+samplelist = sampleinput$sampleid
 print("Basic table")
 output = data.frame(projectcode=projectcode, cancer_type=cancer_type, samplename=samplelist)
 
@@ -69,7 +74,7 @@ getPloidy = function(samplename) {
   subclones$length = round((subclones$endpos-subclones$startpos)/1000)
   cn_state_one = (subclones$nMaj1_A+subclones$nMin1_A)*subclones$frac1_A
   cn_state_two = ifelse(!is.na(subclones$frac2_A), (subclones$nMaj2_A+subclones$nMin2_A)*subclones$frac2_A, 0)
-  ploidy = sum((cn_state_one+cn_state_two) * subclones$length) / sum(subclones$length)
+  ploidy = sum((cn_state_one+cn_state_two) * subclones$length, na.rm=T) / sum(subclones$length, na.rm=T)
   return(ploidy)
 }
 
@@ -97,7 +102,9 @@ getSubclonesAndAssignments = function(samplename, min_clonal_ccf=CLONAL_PEAK_MIN
   clusters = read.table(paste(sample_dp_dir, samplename, SNV_CLUSTERS_SUFFIX, sep=""), header=T, stringsAsFactors=F)
   assignments = table(read.table(paste(sample_dp_dir, samplename, SNV_ASSIGNMENT_SUFFIX, sep=""), header=T, stringsAsFactors=F)$cluster)
   total_muts = sum(assignments)
-  kept_clusters = names(assignments)[assignments > total_muts*FRAC_SNVS_CLUSTER]
+#  kept_clusters = names(assignments)[assignments > (total_muts*FRAC_SNVS_CLUSTER) | assignments > MIN_NUM_SNVS_CLUSTER]
+#  kept_clusters = names(assignments)[assignments > (total_muts*FRAC_SNVS_CLUSTER)]
+  kept_clusters = names(assignments)
   
   # Count the number of subclones and SNVs assigned
   num_clonal = 0
@@ -136,7 +143,9 @@ output = data.frame(output, res)
 # normalCN means what should be considered the normal CN status of each allele
 # Allows for discrimination between diploid and tetraploid samples
 getCNstatus = function(segment, normalCN=1) {
-  if (segment$frac1_A==1) {
+  if (is.na(segment$nMaj1_A) | is.na(segment$nMaj1_A)) {
+     status = "noCNA"
+  } else if (segment$frac1_A==1) {
     # Check if normal or abberrated
     if (segment$nMaj1_A==normalCN & segment$nMaj1_A==segment$nMin1_A) {
       status = "noCNA"
@@ -235,9 +244,23 @@ output$nrpcc = round((output$purity) / (output$purity*output$ploidy + (1-output$
 output$refit = NA
 
 #############################################################################################################################
+# Annotations from ICGC, ids and histology
+#############################################################################################################################
+anno = readr::read_tsv(ICGC_HISTOLOGY_FILE)
+annotations = lapply(1:nrow(sampleinput), function(i) {
+  sel = sampleinput$icgc_sample_id[i]==anno$icgc_sample_id & sampleinput$icgc_donor_id[i]==anno$icgc_donor_id & anno$specimen_library_strategy=="WGS"
+  if (sum(sel) > 0) {
+    anno[sel, c("histology_abbreviation", "icgc_sample_id", "icgc_donor_id")]
+  } else {
+    data.frame(histology_abbreviation=NA, icgc_sample_id=NA, icgc_donor_id=NA)
+  }})
+annotations = do.call(rbind, annotations)
+output = data.frame(output, annotations)
+
+#############################################################################################################################
 # save output
 #############################################################################################################################
-write.table(output, file="summary_table.txt", sep="\t", row.names=F, quote=F)
+write.table(output, file="summary_table_2.txt", sep="\t", row.names=F, quote=F)
 
 warnings()
 q(save="no")

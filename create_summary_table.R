@@ -26,7 +26,7 @@ SNV_ASSIGNMENT_SUFFIX = "_1250iters_250burnin_bestConsensusAssignments.bed"
 # Fraction of total SNVs assigned to a cluster to make it believable
 FRAC_SNVS_CLUSTER = 0.01
 # Minimum number of SNVs that make a cluster believable. This is jointly applied with the above filter, if either passed the cluster is kept
-#MIN_NUM_SNVS_CLUSTER = 50 # Disabled for now as it may need to be increased, further investigation needed
+MIN_NUM_SNVS_CLUSTER = 50 # Disabled for now as it may need to be increased, further investigation needed
 CLONAL_PEAK_MIN_CCF = 0.9
 CLONAL_PEAK_MAX_CCF = 1.1
 PLOIDY_MAX_DIPLOID = 2.7
@@ -66,7 +66,7 @@ getPurity = function(samplename) {
 }
 print("Purity")
 purity = unlist(lapply(samplelist, getPurity))
-output$purity = purity
+output$purity = round(purity, 4)
 
 #############################################################################################################################
 # Ploidy
@@ -105,9 +105,10 @@ getSubclonesAndAssignments = function(samplename, min_clonal_ccf=CLONAL_PEAK_MIN
   clusters = read.table(paste(sample_dp_dir, samplename, SNV_CLUSTERS_SUFFIX, sep=""), header=T, stringsAsFactors=F)
   assignments = table(read.table(paste(sample_dp_dir, samplename, SNV_ASSIGNMENT_SUFFIX, sep=""), header=T, stringsAsFactors=F)$cluster)
   total_muts = sum(assignments)
-#  kept_clusters = names(assignments)[assignments > (total_muts*FRAC_SNVS_CLUSTER) | assignments > MIN_NUM_SNVS_CLUSTER]
+  # kept_clusters = names(assignments)[assignments > (total_muts*FRAC_SNVS_CLUSTER) & assignments > MIN_NUM_SNVS_CLUSTER]
+  kept_clusters = assignments > MIN_NUM_SNVS_CLUSTER]
 #  kept_clusters = names(assignments)[assignments > (total_muts*FRAC_SNVS_CLUSTER)]
-  kept_clusters = names(assignments)
+  # kept_clusters = names(assignments)
   
   # Count the number of subclones and SNVs assigned
   num_clonal = 0
@@ -206,16 +207,20 @@ getCNAFractions = function(samplename, data_table, max_ploid_diploid=PLOIDY_MAX_
   has_clonal_cna = F
   has_clonal_cna_medium = F
   has_clonal_cna_large = F
-  if (any(subclones$frac1_A==1 & !(subclones$nMaj1_A==normalCN & subclones$nMaj1_A==subclones$nMin1_A))) {
-    has_clonal_cna = T
-  }
+  index = subclones$frac1_A==1 & !(subclones$nMaj1_A==normalCN & subclones$nMaj1_A==subclones$nMin1_A & !is.na(subclones$nMaj1_A) & !is.na(subclones$nMin1_A))
   
-  if (any(subclones$frac1_A==1 & !(subclones$nMaj1_A==normalCN & subclones$nMaj1_A==subclones$nMin1_A) & subclones$len > medium_size_aberration)) {
-    has_clonal_cna_medium = T
-  }
-  
-  if (any(subclones$frac1_A==1 & !(subclones$nMaj1_A==normalCN & subclones$nMaj1_A==subclones$nMin1_A) & subclones$len > large_size_aberration)) {
-    has_clonal_cna_large = T
+  if (length(index) > 0) {
+    if (any(index)) {
+      has_clonal_cna = T
+    }
+    
+    if (any(index & subclones$len > medium_size_aberration)) {
+      has_clonal_cna_medium = T
+    }
+    
+    if (any(index & subclones$len > large_size_aberration)) {
+      has_clonal_cna_large = T
+    }
   }
 
   return(list(noCNA=round(cn_sample["noCNA"][[1]]/genome_len, 3), 
